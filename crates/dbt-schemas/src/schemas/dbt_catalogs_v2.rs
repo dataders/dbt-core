@@ -779,62 +779,8 @@ fn parse_horizon_catalog(catalog: &CatalogSpecV2View<'_>) -> FsResult<()> {
             catalog.name
         );
     }
-    let snowflake = catalog.config_block("snowflake");
-
-    if let Some(snowflake) = snowflake {
-        if field_span(snowflake, "base_location_subpath").is_some() {
-            return err!(
-                code => ErrorCode::InvalidConfig,
-                hacky_yml_loc => field_span(snowflake, "base_location_subpath").cloned(),
-                "Catalog '{}' horizon/snowflake base_location_subpath is model-config only and may not be specified in catalogs.yml",
-                catalog.name
-            );
-        }
-        check_unknown_keys(
-            snowflake,
-            SNOWFLAKE_MANAGED_SNOWFLAKE_KEYS,
-            "catalogs[].config.snowflake (horizon)",
-        )?;
-
-        let Some(external_volume) = get_str(snowflake, "external_volume")? else {
-            return err!(
-                code => ErrorCode::InvalidConfig,
-                hacky_yml_loc => catalog.field_span("type").cloned(),
-                "Catalog '{}' horizon/snowflake config requires 'external_volume'",
-                catalog.name
-            );
-        };
-        if external_volume.is_empty_or_whitespace() {
-            return err!(
-                code => ErrorCode::InvalidConfig,
-                hacky_yml_loc => field_span(snowflake, "external_volume").cloned(),
-                "Catalog '{}' horizon/snowflake 'external_volume' must be non-empty",
-                catalog.name
-            );
-        }
-        if let Some(base_location_root) = get_str(snowflake, "base_location_root")?
-            && base_location_root.is_empty_or_whitespace()
-        {
-            return err!(
-                code => ErrorCode::InvalidConfig,
-                hacky_yml_loc => field_span(snowflake, "base_location_root").cloned(),
-                "Catalog '{}' horizon/snowflake base_location_root cannot be blank",
-                catalog.name
-            );
-        }
-        if let Some(policy) = get_str(snowflake, "storage_serialization_policy")?
-            && !is_valid_storage_serialization_policy(policy)
-        {
-            return err!(
-                code => ErrorCode::InvalidConfig,
-                hacky_yml_loc => field_span(snowflake, "storage_serialization_policy").cloned(),
-                "storage_serialization_policy '{}' invalid (COMPATIBLE|OPTIMIZED)",
-                policy
-            );
-        }
-        validate_u32_range(snowflake, "data_retention_time_in_days", 90)?;
-        validate_u32_range(snowflake, "max_data_extension_time_in_days", 90)?;
-        validate_optional_bool(snowflake, "change_tracking")?;
+    if let Some(snowflake) = catalog.config_block("snowflake") {
+        validate_horizon_snowflake_config(snowflake, catalog)?;
     }
 
     if let Some(duckdb) = catalog.config_block("duckdb") {
@@ -848,6 +794,67 @@ fn parse_horizon_catalog(catalog: &CatalogSpecV2View<'_>) -> FsResult<()> {
             );
         }
     }
+
+    Ok(())
+}
+
+fn validate_horizon_snowflake_config(
+    snowflake: &yml::Mapping,
+    catalog: &CatalogSpecV2View<'_>,
+) -> FsResult<()> {
+    if field_span(snowflake, "base_location_subpath").is_some() {
+        return err!(
+            code => ErrorCode::InvalidConfig,
+            hacky_yml_loc => field_span(snowflake, "base_location_subpath").cloned(),
+            "Catalog '{}' horizon/snowflake base_location_subpath is model-config only and may not be specified in catalogs.yml",
+            catalog.name
+        );
+    }
+    check_unknown_keys(
+        snowflake,
+        SNOWFLAKE_MANAGED_SNOWFLAKE_KEYS,
+        "catalogs[].config.snowflake (horizon)",
+    )?;
+
+    let Some(external_volume) = get_str(snowflake, "external_volume")? else {
+        return err!(
+            code => ErrorCode::InvalidConfig,
+            hacky_yml_loc => catalog.field_span("type").cloned(),
+            "Catalog '{}' horizon/snowflake config requires 'external_volume'",
+            catalog.name
+        );
+    };
+    if external_volume.is_empty_or_whitespace() {
+        return err!(
+            code => ErrorCode::InvalidConfig,
+            hacky_yml_loc => field_span(snowflake, "external_volume").cloned(),
+            "Catalog '{}' horizon/snowflake 'external_volume' must be non-empty",
+            catalog.name
+        );
+    }
+    if let Some(base_location_root) = get_str(snowflake, "base_location_root")?
+        && base_location_root.is_empty_or_whitespace()
+    {
+        return err!(
+            code => ErrorCode::InvalidConfig,
+            hacky_yml_loc => field_span(snowflake, "base_location_root").cloned(),
+            "Catalog '{}' horizon/snowflake base_location_root cannot be blank",
+            catalog.name
+        );
+    }
+    if let Some(policy) = get_str(snowflake, "storage_serialization_policy")?
+        && !is_valid_storage_serialization_policy(policy)
+    {
+        return err!(
+            code => ErrorCode::InvalidConfig,
+            hacky_yml_loc => field_span(snowflake, "storage_serialization_policy").cloned(),
+            "storage_serialization_policy '{}' invalid (COMPATIBLE|OPTIMIZED)",
+            policy
+        );
+    }
+    validate_u32_range(snowflake, "data_retention_time_in_days", 90)?;
+    validate_u32_range(snowflake, "max_data_extension_time_in_days", 90)?;
+    validate_optional_bool(snowflake, "change_tracking")?;
 
     Ok(())
 }
